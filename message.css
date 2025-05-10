@@ -1,0 +1,101 @@
+.notyn {
+    position: fixed;
+    bottom: 6em;
+    right: 0;
+    max-width: 320px;
+    z-index: 10000000
+}
+
+.notyf {
+    margin-bottom: .6em;
+    color: #fff;
+    float: right;
+    min-width: 200px;
+    padding: 1em 3em 1em 3.4em;
+    box-shadow: -3px 3px 6px rgba(0,0,0,.1);
+    transform: translateX(1.5em);
+    transition: .3s;
+    -webkit-backdrop-filter: saturate(5) blur(20px);
+    backdrop-filter: saturate(5) blur(20px);
+    -webkit-animation: notyf .4s cubic-bezier(.35,.71,.46,1.08);
+    animation: notyf .4s cubic-bezier(.35,.71,.46,1.08)
+}
+
+.notyn-out .notyf {
+    transform: translateX(110%);
+    opacity: .5;
+    transition: .5s
+}
+
+@-webkit-keyframes notyf {
+    0% {
+        transform: translateX(110%);
+        opacity: 0
+    }
+
+    100% {
+        transform: translateX(1.5em);
+        opacity: 1
+    }
+}
+
+@keyframes notyf {
+    0% {
+        transform: translateX(110%);
+        opacity: 0
+    }
+
+    100% {
+        transform: translateX(1.5em);
+        opacity: 1
+    }
+}
+
+.notyf:before {
+    font: normal normal normal 16px/1 FontAwesome;
+    left: .8em;
+    font-size: 1.5em;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    margin: auto;
+    height: 20px
+}
+
+.notyf.success {
+    background: linear-gradient(90deg,rgba(15,147,249,.7),rgba(61,189,249,.8))
+}
+
+.notyf.success:before {
+    content: '\f058'
+}
+
+.notyf.info {
+    background: linear-gradient(90deg,rgba(58,162,54,.8),rgba(89,247,131,.8))
+}
+
+.notyf.info:before {
+    content: '\f0a1'
+}
+
+.notyf.load,.notyf.warning {
+    background: linear-gradient(90deg,rgba(253,170,71,.7),rgba(247,154,13,.8))
+}
+
+.notyf.warning:before {
+    content: '\f05a'
+}
+
+.notyf.danger {
+    background: linear-gradient(90deg,rgba(253,69,28,.7),rgba(251,110,75,.8))
+}
+
+.notyf.danger:before {
+    content: '\f057'
+}
+
+.notyf .fa-close {
+    float: right;
+    padding: .6em;
+    margin: -.4em
+}
