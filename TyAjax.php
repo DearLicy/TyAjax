@@ -4,13 +4,7 @@
  * @author DearLicy
  * @link https://github.com/DearLicy/TyAjax
  */
-if (!defined('__TYPECHO_ROOT_DIR__')) {
-    define('__TYPECHO_ROOT_DIR__', dirname(__FILE__) . '/../..');
-    require __TYPECHO_ROOT_DIR__ . '/config.inc.php';
-    require __TYPECHO_ROOT_DIR__ . '/var/Typecho/Common.php';
-    require __TYPECHO_ROOT_DIR__ . '/var/Typecho/Db.php';
-    $db = Typecho_Db::get();
-}
+if (!defined('__TYPECHO_ROOT_DIR__')) exit;
 
 if (!class_exists('TyAjax_Hook')) {
     class TyAjax_Hook
