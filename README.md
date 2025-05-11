@@ -2,8 +2,13 @@
 
 一个轻量级的 AJAX 处理框架，专为 Typecho 博客系统设计，提供简单易用的 AJAX 请求处理功能。
 
-作者QQ群：201307007
+作者QQ群：[201307007](https://qm.qq.com/q/LjqsRojGU4)
+
 作者QQ：82719519
+
+v1.0.0版本为[notyf](https://github.com/DearLicy/Notyf)通知样式
+
+v1.1.0版本为[Qmsg](https://github.com/DearLicy/Qmsg)通知样式
 
 ## 功能特性
 
