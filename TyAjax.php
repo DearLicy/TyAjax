@@ -1,58 +1,67 @@
 <?php
 if (!defined('__TYPECHO_ROOT_DIR__')) {
-    define('__TYPECHO_ROOT_DIR__', dirname(__FILE__).'/../..');
-    require __TYPECHO_ROOT_DIR__.'/config.inc.php';
-    require __TYPECHO_ROOT_DIR__.'/var/Typecho/Common.php';
-    require __TYPECHO_ROOT_DIR__.'/var/Typecho/Db.php';
+    define('__TYPECHO_ROOT_DIR__', dirname(__FILE__) . '/../..');
+    require __TYPECHO_ROOT_DIR__ . '/config.inc.php';
+    require __TYPECHO_ROOT_DIR__ . '/var/Typecho/Common.php';
+    require __TYPECHO_ROOT_DIR__ . '/var/Typecho/Db.php';
     $db = Typecho_Db::get();
 }
 
 if (!class_exists('TyAjax_Hook')) {
-    class TyAjax_Hook {
+    class TyAjax_Hook
+    {
         public $callbacks = array();
-        
-        public function add_filter($tag, $function_to_add, $priority, $accepted_args) {
+
+        public function add_filter($tag, $function_to_add, $priority, $accepted_args)
+        {
             $this->callbacks[$priority][] = array(
                 'function' => $function_to_add,
                 'accepted_args' => $accepted_args
             );
             return true;
         }
-        
-        public function apply_filters($value, $args) {
+
+        public function apply_filters($value, $args)
+        {
             ksort($this->callbacks);
-            
+
             foreach ($this->callbacks as $priority => $callbacks) {
                 foreach ($callbacks as $callback) {
                     $args = array_slice($args, 0, $callback['accepted_args']);
                     $value = call_user_func_array($callback['function'], $args);
                 }
             }
-            
+
             return $value;
         }
     }
 }
 
-class TyAjax_Core {
+class TyAjax_Core
+{
     public static $filters = array();
     public static $actions = array();
 
-    public static function init() {
-        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && 
-            strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+    public static function init()
+    {
+        if (
+            !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
+            strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest'
+        ) {
             self::handle_request();
             exit;
         }
-        
+
+        Typecho_Plugin::factory('Widget_Archive')->header = array(__CLASS__, 'inject_styles');
         Typecho_Plugin::factory('Widget_Archive')->footer = array(__CLASS__, 'inject_scripts');
     }
 
-    private static function handle_request() {
+    private static function handle_request()
+    {
         try {
             header('Content-Type: application/json');
             $data = $_POST;
-            
+
             if (empty($data['action'])) {
                 self::send_error('缺少action参数', 'danger', 400);
             }
@@ -67,7 +76,7 @@ class TyAjax_Core {
             }
 
             $response = self::apply_filters($hook, null, $data);
-            
+
             if (!isset($response['error'])) {
                 $response = [
                     'error' => 0,
@@ -76,41 +85,44 @@ class TyAjax_Core {
                     'data' => $response['data'] ?? null
                 ];
             }
-            
+
             echo json_encode($response);
             exit;
-
         } catch (Exception $e) {
             self::send_error($e->getMessage(), 'danger', $e->getCode());
         }
     }
 
-    public static function add_filter($hook, $callback, $priority = 10, $accepted_args = 1) {
+    public static function add_filter($hook, $callback, $priority = 10, $accepted_args = 1)
+    {
         if (!isset(self::$filters[$hook])) {
             self::$filters[$hook] = new TyAjax_Hook();
         }
-        
+
         self::$filters[$hook]->add_filter($hook, $callback, $priority, $accepted_args);
-        
+
         if (strpos($hook, 'ty_ajax_') === 0) {
             self::$actions[$hook] = true;
         }
-        
+
         return true;
     }
 
-    public static function apply_filters($hook, $value = null, ...$args) {
+    public static function apply_filters($hook, $value = null, ...$args)
+    {
         if (!isset(self::$filters[$hook])) {
             return $value;
         }
         return self::$filters[$hook]->apply_filters($value, $args);
     }
 
-    public static function has_action($hook) {
+    public static function has_action($hook)
+    {
         return isset(self::$actions[$hook]);
     }
 
-    public static function send_success($msg = '操作成功', $data = null, $ys = '') {
+    public static function send_success($msg = '操作成功', $data = null, $ys = '')
+    {
         echo json_encode([
             'error' => 0,
             'msg' => $msg,
@@ -120,7 +132,8 @@ class TyAjax_Core {
         exit;
     }
 
-    public static function send_error($msg = '操作失败', $ys = 'danger', $status = 400) {
+    public static function send_error($msg = '操作失败', $ys = 'danger', $status = 400)
+    {
         http_response_code($status);
         echo json_encode([
             'error' => 1,
@@ -130,12 +143,19 @@ class TyAjax_Core {
         exit;
     }
 
-    public static function inject_scripts() {
+    public static function inject_styles()
+    {
         echo <<<HTML
-<link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">
+    <link href="https://csf.vxras.com/usr/themes/zibll/message.css" rel="stylesheet">
+    HTML;
+    }
+
+    public static function inject_scripts()
+    {
+        echo <<<HTML
 <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script src="https://csf.vxras.com/usr/themes/zibll/message.js"></script>
-<link href="https://csf.vxras.com/usr/themes/zibll/message.css">
 <script>
 /**
  * @description: ajax请求封装
@@ -272,37 +292,43 @@ HTML;
 }
 
 if (!function_exists('TyAjax_filter')) {
-    function TyAjax_filter($hook, $callback, $priority = 10, $accepted_args = 1) {
+    function TyAjax_filter($hook, $callback, $priority = 10, $accepted_args = 1)
+    {
         return TyAjax_Core::add_filter($hook, $callback, $priority, $accepted_args);
     }
 }
 
 if (!function_exists('TyAjax_action')) {
-    function TyAjax_action($hook, $callback, $priority = 10, $accepted_args = 1) {
+    function TyAjax_action($hook, $callback, $priority = 10, $accepted_args = 1)
+    {
         return TyAjax_Core::add_filter($hook, $callback, $priority, $accepted_args);
     }
 }
 
 if (!function_exists('TyAjax_apply_filters')) {
-    function TyAjax_apply_filters($hook, $value = null, ...$args) {
+    function TyAjax_apply_filters($hook, $value = null, ...$args)
+    {
         return TyAjax_Core::apply_filters($hook, $value, ...$args);
     }
 }
 
 if (!function_exists('TyAjax_has_action')) {
-    function TyAjax_has_action($hook) {
+    function TyAjax_has_action($hook)
+    {
         return TyAjax_Core::has_action($hook);
     }
 }
 
 if (!function_exists('TyAjax_send_success')) {
-    function TyAjax_send_success($msg = '操作成功', $data = null, $ys = '') {
+    function TyAjax_send_success($msg = '操作成功', $data = null, $ys = '')
+    {
         TyAjax_Core::send_success($msg, $data, $ys);
     }
 }
 
 if (!function_exists('TyAjax_send_error')) {
-    function TyAjax_send_error($msg = '操作失败', $ys = 'danger', $status = 400) {
+    function TyAjax_send_error($msg = '操作失败', $ys = 'danger', $status = 400)
+    {
         TyAjax_Core::send_error($msg, $ys, $status);
     }
 }
