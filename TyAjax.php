@@ -1,30 +1,65 @@
 <?php
-if (!defined('__TYPECHO_ROOT_DIR__')) {
-    define('__TYPECHO_ROOT_DIR__', dirname(__FILE__).'/../..');
-    require __TYPECHO_ROOT_DIR__.'/config.inc.php';
-    require __TYPECHO_ROOT_DIR__.'/var/Typecho/Common.php';
-    require __TYPECHO_ROOT_DIR__.'/var/Typecho/Db.php';
-    $db = Typecho_Db::get();
-}
+/**
+ * Typecho Ajax 处理核心类
+ * 
+ * 提供完整的 AJAX 请求处理机制，包括：
+ * - 请求路由分发
+ * - 钩子(Hook)管理系统
+ * - 响应格式化
+ * - 资源自动加载
+ */
 
+// 安全检测，防止直接访问
+if (!defined('__TYPECHO_ROOT_DIR__')) exit;
+
+/**
+ * 钩子(Hook)管理类
+ * 
+ * 实现 WordPress 风格的过滤器(Filters)机制
+ */
 if (!class_exists('TyAjax_Hook')) {
     class TyAjax_Hook {
+        /**
+         * 存储所有回调函数
+         * @var array 格式：[优先级 => [回调数组]]
+         */
         public $callbacks = array();
         
+        /**
+         * 添加过滤器回调
+         * 
+         * @param string $tag 钩子名称
+         * @param callable $function_to_add 回调函数
+         * @param int $priority 优先级(数字越小越先执行)
+         * @param int $accepted_args 接收的参数数量
+         * @return bool 总是返回 true
+         */
         public function add_filter($tag, $function_to_add, $priority, $accepted_args) {
             $this->callbacks[$priority][] = array(
-                'function' => $function_to_add,
-                'accepted_args' => $accepted_args
+                'function' => $function_to_add,    // 回调函数
+                'accepted_args' => $accepted_args  // 接收参数数量
             );
             return true;
         }
         
+        /**
+         * 执行过滤器链
+         * 
+         * @param mixed $value 初始值
+         * @param array $args 参数数组
+         * @return mixed 经过所有回调处理后的最终值
+         */
         public function apply_filters($value, $args) {
+            // 按优先级排序(从小到大)
             ksort($this->callbacks);
             
+            // 遍历所有优先级
             foreach ($this->callbacks as $priority => $callbacks) {
+                // 遍历当前优先级的所有回调
                 foreach ($callbacks as $callback) {
+                    // 裁剪参数数量
                     $args = array_slice($args, 0, $callback['accepted_args']);
+                    // 执行回调并更新值
                     $value = call_user_func_array($callback['function'], $args);
                 }
             }
@@ -34,64 +69,116 @@ if (!class_exists('TyAjax_Hook')) {
     }
 }
 
+/**
+ * AJAX 核心处理类
+ * 
+ * 提供静态方法处理 AJAX 请求和资源管理
+ */
 class TyAjax_Core {
+    /**
+     * 存储所有过滤器
+     * @var array [钩子名 => TyAjax_Hook 实例]
+     */
     public static $filters = array();
+    
+    /**
+     * 存储已注册的动作(Actions)
+     * @var array [钩子名 => true]
+     */
     public static $actions = array();
 
+    /**
+     * 初始化 AJAX 系统
+     * 
+     * - 检测 AJAX 请求并处理
+     * - 注册资源加载钩子
+     */
     public static function init() {
+        // 检测 AJAX 请求(XMLHttpRequest)
         if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && 
             strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
             self::handle_request();
             exit;
         }
         
+        // 注册资源加载钩子
+        Typecho_Plugin::factory('Widget_Archive')->header = array(__CLASS__, 'inject_styles');
         Typecho_Plugin::factory('Widget_Archive')->footer = array(__CLASS__, 'inject_scripts');
     }
 
+    /**
+     * 处理 AJAX 请求
+     * 
+     * - 验证请求
+     * - 路由到对应处理函数
+     * - 格式化响应
+     */
     private static function handle_request() {
         try {
+            // 设置响应头
             header('Content-Type: application/json');
+            
+            // 获取请求数据
             $data = $_POST;
             
+            // 验证 action 参数
             if (empty($data['action'])) {
                 self::send_error('缺少action参数', 'danger', 400);
             }
 
+            // 确定钩子名称(区分登录/未登录状态)
             $action = $data['action'];
             $user = Typecho_Widget::widget('Widget_User');
             $is_logged_in = method_exists($user, 'hasLogin') ? $user->hasLogin() : false;
             $hook = $is_logged_in ? "ty_ajax_{$action}" : "ty_ajax_nopriv_{$action}";
 
+            // 检查是否有对应的处理函数
             if (!self::has_action($hook)) {
                 self::send_error("未找到{$action}的处理方法", 'danger', 404);
             }
 
+            // 执行过滤器链获取响应
             $response = self::apply_filters($hook, null, $data);
             
+            // 标准化响应格式
             if (!isset($response['error'])) {
                 $response = [
-                    'error' => 0,
-                    'msg' => $response['msg'] ?? '操作成功',
-                    'ys' => $response['ys'] ?? '',
-                    'data' => $response['data'] ?? null
+                    'error' => 0,                      // 错误码(0=成功)
+                    'msg' => $response['msg'] ?? '操作成功', // 消息
+                    'ys' => $response['ys'] ?? '',     // 消息样式
+                    'data' => $response['data'] ?? null // 数据
                 ];
             }
             
+            // 输出 JSON 响应
             echo json_encode($response);
             exit;
 
         } catch (Exception $e) {
+            // 捕获异常并返回错误
             self::send_error($e->getMessage(), 'danger', $e->getCode());
         }
     }
 
+    /**
+     * 添加过滤器/动作
+     * 
+     * @param string $hook 钩子名称
+     * @param callable $callback 回调函数
+     * @param int $priority 优先级
+     * @param int $accepted_args 接收参数数量
+     * @return bool 总是返回 true
+     */
     public static function add_filter($hook, $callback, $priority = 10, $accepted_args = 1) {
+        // 初始化钩子对象(如果不存在)
         if (!isset(self::$filters[$hook])) {
             self::$filters[$hook] = new TyAjax_Hook();
         }
         
+        // 添加回调
         self::$filters[$hook]->add_filter($hook, $callback, $priority, $accepted_args);
         
+        // 如果是动作(Action)则记录下来
         if (strpos($hook, 'ty_ajax_') === 0) {
             self::$actions[$hook] = true;
         }
@@ -99,17 +186,39 @@ class TyAjax_Core {
         return true;
     }
 
+    /**
+     * 执行过滤器链
+     * 
+     * @param string $hook 钩子名称
+     * @param mixed $value 初始值
+     * @param mixed ...$args 可变参数
+     * @return mixed 处理后的值
+     */
     public static function apply_filters($hook, $value = null, ...$args) {
+        // 如果钩子不存在则直接返回值
         if (!isset(self::$filters[$hook])) {
             return $value;
         }
         return self::$filters[$hook]->apply_filters($value, $args);
     }
 
+    /**
+     * 检查动作是否存在
+     * 
+     * @param string $hook 钩子名称
+     * @return bool 是否存在
+     */
     public static function has_action($hook) {
         return isset(self::$actions[$hook]);
     }
 
+    /**
+     * 发送成功响应
+     * 
+     * @param string $msg 消息内容
+     * @param mixed $data 返回数据
+     * @param string $ys 消息样式
+     */
     public static function send_success($msg = '操作成功', $data = null, $ys = '') {
         echo json_encode([
             'error' => 0,
@@ -120,6 +229,13 @@ class TyAjax_Core {
         exit;
     }
 
+    /**
+     * 发送错误响应
+     * 
+     * @param string $msg 错误消息
+     * @param string $ys 消息样式
+     * @param int $status HTTP 状态码
+     */
     public static function send_error($msg = '操作失败', $ys = 'danger', $status = 400) {
         http_response_code($status);
         echo json_encode([
@@ -130,177 +246,101 @@ class TyAjax_Core {
         exit;
     }
 
+    /**
+     * 注入 CSS 到 <head>
+     * 
+     * 加载以下资源：
+     * - jQuery
+     * - Font Awesome
+     * - Qmsg 样式
+     */
+    public static function inject_styles() {
+        // 获取主题资源路径
+        $baseUrl = Helper::options()->themeUrl . '/assets/';
+        
+        // 输出资源标签
+        echo '<script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.7.1/jquery.min.js"></script>';
+        echo '<link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">';
+        echo '<link href="' . $baseUrl . 'css/message.css" rel="stylesheet">';
+    }
+
+    /**
+     * 注入 JS 到 </body> 前
+     * 
+     * 加载以下资源：
+     * - Qmsg 脚本
+     * - 自定义主脚本
+     */
     public static function inject_scripts() {
-        echo <<<HTML
-<link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">
-<script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-<script src="https://csf.vxras.com/usr/themes/zibll/message.js"></script>
-<link href="https://csf.vxras.com/usr/themes/zibll/message.css">
-<script>
+        // 获取主题资源路径
+        $baseUrl = Helper::options()->themeUrl . '/assets/';
+        
+        // 输出资源标签
+        echo '<script src="' . $baseUrl . 'js/message.js"></script>';
+        echo '<script src="' . $baseUrl . 'js/main.js"></script>';
+    }
+}
+
 /**
- * @description: ajax请求封装
- * @param {*} _this 按钮的jquery对象
- * @param {*} data 传递的数据
- * @param {*} success 成功后的回调函数
- * @param {*} noty 提示信息
- * @param {*} no_loading 是否不显示加载动画
- * @return {*}
+ * 快捷函数：添加过滤器
+ * 
+ * @see TyAjax_Core::add_filter()
  */
-function TyAjax(_this, data, success, noty, no_loading) {
-    if (_this.attr('disabled')) {
-        return !1;
-    }
-    if (!data) {
-        var _data = _this.attr('form-data');
-        if (_data) {
-            try {
-                data = $.parseJSON(_data);
-            } catch (e) {}
-        }
-        if (!data) {
-            var form = _this.parents('form');
-            data = form.serializeObject();
-        }
-    }
-
-    var _action = _this.attr('form-action');
-    if (_action) {
-        data.action = _action;
-    }
-
-    // 人机验证
-    if (data.captcha_mode && typeof is_captcha === 'function' && is_captcha(data.captcha_mode)) {
-        tbquire(['captcha'], function () {
-            CaptchaOpen(_this, data.captcha_mode);
-        });
-        return !1;
-    }
-
-    if (window.captcha) {
-        data.captcha = JSON.parse(JSON.stringify(window.captcha));
-        data.captcha._this && delete data.captcha._this;
-        window.captcha = {};
-    }
-
-    var _text = _this.html();
-    var _loading = no_loading ? _text : '<i class="loading mr6"></i><text>请稍候</text>';
-    
-    // 创建加载提示（使用固定ID）
-    var noticeId = 'tyajax_notice_' + Date.now();
-    if (noty != 'stop') {
-        notyf(noty || '正在处理请稍后...', 'load', 0, noticeId);
-    }
-    
-    _this.attr('disabled', true).html(_loading);
-    var _url = _this.attr('ajax-href') || window.location.href;
-
-    $.ajax({
-        type: 'POST',
-        url: _url,
-        data: data,
-        dataType: 'json',
-        error: function (n) {
-            var _msg = '操作失败 ' + n.status + ' ' + n.statusText + '，请刷新页面后重试';
-            if (n.responseText && n.responseText.indexOf('致命错误') > -1) {
-                _msg = '网站遇到致命错误，请检查插件冲突或通过错误日志排除错误';
-            }
-            console.error('ajax请求错误，错误信息如下：', n);
-            
-            // 直接更新提示内容（不关闭）
-            notyf(_msg, 'danger', 5000, noticeId);
-            
-            _this.attr('disabled', false).html(_text);
-        },
-        success: function (n) {
-            var ys = n.ys ? n.ys : n.error ? 'danger' : 'success';
-            if (n.error) {
-                typeof _win !== 'undefined' && (_win.slidercaptcha = false);
-                data.tcaptcha_ticket && (tcaptcha = {});
-            }
-            
-            // 直接更新提示内容（不关闭）
-            if (noty != 'stop') {
-                notyf(n.msg || '处理完成', ys, 3000, noticeId);
-            } else if (n.msg) {
-                notyf(n.msg, ys, 3000);
-            }
-
-            _this.attr('disabled', false).html(_text).trigger('TyAjax.success', n);
-            $.isFunction(success) && success(n, _this, data);
-
-            if (n.hide_modal) {
-                _this.closest('.modal').modal('hide');
-            }
-            if (n.reload) {
-                if (n.goto) {
-                    window.location.href = n.goto;
-                    window.location.reload;
-                } else {
-                    window.location.reload();
-                }
-            }
-        },
-    });
-}
-
-// 事件绑定保持与zib_ajax一致
-$(document).on('TyAjax.success', '[next-tab]', function (e, n) {
-    var _next = $(this).attr('next-tab');
-    if (_next && n && !n.error) {
-        $('a[href="#' + _next + '"]').tab('show');
-    }
-});
-jQuery(function($) {
-    $('body').on('click', '.ty-ajax-submit', function(e) {
-        e.preventDefault();
-        TyAjax($(this));
-    });
-    
-    $.fn.serializeObject = function() {
-        var obj = {};
-        $.each(this.serializeArray(), function() {
-            obj[this.name] = obj[this.name] !== undefined ? 
-                [].concat(obj[this.name], this.value || '') : 
-                this.value || '';
-        });
-        return obj;
-    };
-});
-</script>
-HTML;
-    }
-}
-
 if (!function_exists('TyAjax_filter')) {
     function TyAjax_filter($hook, $callback, $priority = 10, $accepted_args = 1) {
         return TyAjax_Core::add_filter($hook, $callback, $priority, $accepted_args);
     }
 }
 
+/**
+ * 快捷函数：添加动作
+ * 
+ * @see TyAjax_Core::add_filter()
+ */
 if (!function_exists('TyAjax_action')) {
     function TyAjax_action($hook, $callback, $priority = 10, $accepted_args = 1) {
         return TyAjax_Core::add_filter($hook, $callback, $priority, $accepted_args);
     }
 }
 
+/**
+ * 快捷函数：执行过滤器
+ * 
+ * @see TyAjax_Core::apply_filters()
+ */
 if (!function_exists('TyAjax_apply_filters')) {
     function TyAjax_apply_filters($hook, $value = null, ...$args) {
         return TyAjax_Core::apply_filters($hook, $value, ...$args);
     }
 }
 
+/**
+ * 快捷函数：检查动作是否存在
+ * 
+ * @see TyAjax_Core::has_action()
+ */
 if (!function_exists('TyAjax_has_action')) {
     function TyAjax_has_action($hook) {
         return TyAjax_Core::has_action($hook);
     }
 }
 
+/**
+ * 快捷函数：发送成功响应
+ * 
+ * @see TyAjax_Core::send_success()
+ */
 if (!function_exists('TyAjax_send_success')) {
     function TyAjax_send_success($msg = '操作成功', $data = null, $ys = '') {
         TyAjax_Core::send_success($msg, $data, $ys);
     }
 }
 
+/**
+ * 快捷函数：发送错误响应
+ * 
+ * @see TyAjax_Core::send_error()
+ */
 if (!function_exists('TyAjax_send_error')) {
     function TyAjax_send_error($msg = '操作失败', $ys = 'danger', $status = 400) {
         TyAjax_Core::send_error($msg, $ys, $status);
