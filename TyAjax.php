@@ -1,4 +1,9 @@
 <?php
+/**
+ * 一个轻量级的 AJAX 处理框架，专为 Typecho 博客系统设计，提供简单易用的 AJAX 请求处理功能。
+ * @author DearLicy
+ * @link https://github.com/DearLicy/TyAjax
+ */
 if (!defined('__TYPECHO_ROOT_DIR__')) {
     define('__TYPECHO_ROOT_DIR__', dirname(__FILE__) . '/../..');
     require __TYPECHO_ROOT_DIR__ . '/config.inc.php';
